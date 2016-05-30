@@ -76,7 +76,7 @@ static OSStatus playProc(AudioConverterRef inAudioConverter,
 		dest = ca->buffer;
 		
 		/* Only play if we have data left */
-		if ( sfifo_used( &ca->fifo ) < (int)wanted ) {
+		if ( sfifo_used( &ca->fifo ) < wanted ) {
 			if(!ca->decode_done) {
 				warning("Didn't have any audio data in callback (buffer underflow)");
 				return -1;
@@ -197,10 +197,6 @@ static int open_coreaudio(audio_output_t *ao)
 			inFormat.mFormatFlags |= kLinearPCMFormatFlagIsFloat;
 			ca->bps = 4;
 			break;
-		case MPG123_ENC_FLOAT_64:
-			inFormat.mFormatFlags |= kLinearPCMFormatFlagIsFloat;
-			ca->bps = 4;
-			break;
 	}
 	
 	inFormat.mBitsPerChannel = ca->bps << 3;
@@ -245,7 +241,7 @@ static int open_coreaudio(audio_output_t *ao)
 
 static int get_formats_coreaudio(audio_output_t *ao)
 {
-	return MPG123_ENC_SIGNED_16|MPG123_ENC_SIGNED_8|MPG123_ENC_UNSIGNED_8|MPG123_ENC_SIGNED_32|MPG123_ENC_FLOAT_32|MPG123_ENC_FLOAT_64;
+	return MPG123_ENC_SIGNED_16|MPG123_ENC_SIGNED_8|MPG123_ENC_UNSIGNED_8|MPG123_ENC_SIGNED_32|MPG123_ENC_FLOAT_32;
 }
 
 static int write_coreaudio(audio_output_t *ao, unsigned char *buf, int len)

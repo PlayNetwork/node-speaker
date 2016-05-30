@@ -1,7 +1,7 @@
 /*
 	mpg123: main code of the program (not of the decoder...)
 
-	copyright 1995-2010 by the mpg123 project - free software under the terms of the LGPL 2.1
+	copyright 1995-2013 by the mpg123 project - free software under the terms of the LGPL 2.1
 	see COPYING and AUTHORS files in distribution or http://mpg123.org
 	initially written by Michael Hipp
 */
@@ -20,7 +20,6 @@
 
 #include <errno.h>
 #include <string.h>
-#include <fcntl.h>
 #include <time.h>
 
 #ifdef HAVE_SCHED_H
@@ -128,6 +127,7 @@ char *equalfile = NULL;
 struct httpdata htd;
 int fresh = TRUE;
 int have_output = FALSE; /* If we are past the output init step. */
+FILE* aux_out = NULL; /* Output for interesting information, normally on stdout to be parseable. */
 
 int buffer_fd[2];
 int buffer_pid;
@@ -141,6 +141,7 @@ static int filept = -1;
 
 static int network_sockets_used = 0; /* Win32 socket open/close Support */
 
+char *fullprogname = NULL; /* Copy of argv[0]. */
 char *binpath; /* Path to myself. */
 
 /* File-global storage of command line arguments.
@@ -175,7 +176,7 @@ void next_track(void)
 void prev_track(void)
 {
 	if(pl.pos > 2) pl.pos -= 2;
-	else pl.pos = 0;
+	else pl.pos = skip_tracks = 0;
 
 	next_track();
 }
@@ -205,6 +206,7 @@ void safe_exit(int code)
 #endif
 	/* It's ugly... but let's just fix this still-reachable memory chunk of static char*. */
 	split_dir_file("", &dummy, &dammy);
+	if(fullprogname) free(fullprogname);
 	exit(code);
 }
 
@@ -322,6 +324,7 @@ static void set_out_stdout(char *arg)
 {
 	param.outmode=DECODE_FILE;
 	param.remote_err=TRUE;
+	aux_out = stderr;
 	OutputDescriptor=STDOUT_FILENO;
 	#ifdef WIN32
 	_setmode(STDOUT_FILENO, _O_BINARY);
@@ -332,6 +335,7 @@ static void set_out_stdout1(char *arg)
 {
 	param.outmode=DECODE_AUDIOFILE;
 	param.remote_err=TRUE;
+	aux_out = stderr;
 	OutputDescriptor=STDOUT_FILENO;
 	#ifdef WIN32
 	_setmode(STDOUT_FILENO, _O_BINARY);
@@ -421,6 +425,7 @@ topt opts[] = {
 #ifndef NOXFERMEM
 	{'b', "buffer",      GLO_ARG | GLO_LONG, 0, &param.usebuffer,  0},
 	{0,  "smooth",      GLO_INT,  0, &param.smooth, 1},
+	{0, "preload", GLO_ARG|GLO_DOUBLE, 0, &param.preload, 0},
 #endif
 	{'R', "remote",      GLO_INT,  0, &param.remote, TRUE},
 	{0,   "remote-err",  GLO_INT,  0, &param.remote_err, TRUE},
@@ -467,6 +472,7 @@ topt opts[] = {
 	{0 , "longhelp" ,        0,  want_long_usage, 0,      0 },
 	{0 , "version" ,         0,  give_version, 0,         0 },
 	{'l', "listentry",       GLO_ARG | GLO_LONG, 0, &param.listentry, 0 },
+	{0, "continue", GLO_INT, set_appflag, &appflag, MPG123APP_CONTINUE },
 	{0, "rva-mix",         GLO_INT,  0, &param.rva, 1 },
 	{0, "rva-radio",         GLO_INT,  0, &param.rva, 1 },
 	{0, "rva-album",         GLO_INT,  0, &param.rva, 2 },
@@ -490,7 +496,6 @@ topt opts[] = {
 	{0, "index-size", GLO_ARG|GLO_LONG, 0, &param.index_size, 0},
 	{0, "no-seekbuffer", GLO_INT, unset_frameflag, &frameflag, MPG123_SEEKBUFFER},
 	{'e', "encoding", GLO_ARG|GLO_CHAR, 0, &param.force_encoding, 0},
-	{0, "preload", GLO_ARG|GLO_DOUBLE, 0, &param.preload, 0},
 	{0, "preframes", GLO_ARG|GLO_LONG, 0, &param.preframes, 0},
 	{0, "skip-id3v2", GLO_INT, set_frameflag, &frameflag, MPG123_SKIP_ID3V2},
 	{0, "streamdump", GLO_ARG|GLO_CHAR, 0, &param.streamdump, 0},
@@ -655,10 +660,13 @@ int play_frame(void)
 {
 	unsigned char *audio;
 	int mc;
+	long new_header = 0;
 	size_t bytes;
 	debug("play_frame");
 	/* The first call will not decode anything but return MPG123_NEW_FORMAT! */
 	mc = mpg123_decode_frame(mh, &framenum, &audio, &bytes);
+	mpg123_getstate(mh, MPG123_FRESH_DECODER, &new_header, NULL);
+
 	/* Play what is there to play (starting with second decode_frame call!) */
 	if(bytes)
 	{
@@ -699,14 +707,15 @@ int play_frame(void)
 			mpg123_getformat(mh, &rate, &channels, &format);
 			if(param.verbose > 2) fprintf(stderr, "\nNote: New output format %liHz %ich, format %i\n", rate, channels, format);
 
-			if(!param.quiet)
-			{
-				fprintf(stderr, "\n");
-				if(param.verbose) print_header(mh);
-				else print_header_compact(mh);
-			}
+			new_header = 1;
 			reset_audio(rate, channels, format);
 		}
+	}
+	if(new_header && !param.quiet)
+	{
+		fprintf(stderr, "\n");
+		if(param.verbose) print_header(mh);
+		else print_header_compact(mh);
 	}
 	return 1;
 }
@@ -780,6 +789,7 @@ int skip_or_die(struct timeval *start_time)
 int main(int sys_argc, char ** sys_argv)
 {
 	int result;
+	char end_of_files = FALSE;
 	long parr;
 	char *fname;
 	int libpar = 0;
@@ -787,7 +797,7 @@ int main(int sys_argc, char ** sys_argv)
 #if !defined(WIN32) && !defined(GENERIC)
 	struct timeval start_time;
 #endif
-
+	aux_out = stdout; /* Need to initialize here because stdout is not a constant?! */
 #if defined (WANT_WIN32_UNICODE)
 	if(win32_cmdline_utf8(&argc, &argv) != 0)
 	{
@@ -802,17 +812,23 @@ int main(int sys_argc, char ** sys_argv)
 	win32_net_init();
 #endif
 
+	if(!(fullprogname = strdup(argv[0])))
+	{
+		error("OOM"); /* Out Of Memory. Don't waste bytes on that error. */
+		safe_exit(1);
+	}
 	/* Extract binary and path, take stuff before/after last / or \ . */
-	if((prgName = strrchr(argv[0], '/')) || (prgName = strrchr(argv[0], '\\')))
+	if(  (prgName = strrchr(fullprogname, '/')) 
+	  || (prgName = strrchr(fullprogname, '\\')))
 	{
 		/* There is some explicit path. */
 		prgName[0] = 0; /* End byte for path. */
 		prgName++;
-		binpath = argv[0];
+		binpath = fullprogname;
 	}
 	else
 	{
-		prgName = argv[0]; /* No path separators there. */
+		prgName = fullprogname; /* No path separators there. */
 		binpath = NULL; /* No path at all. */
 	}
 
@@ -986,7 +1002,9 @@ int main(int sys_argc, char ** sys_argv)
 #ifdef HAVE_SETPRIORITY
 	if(param.aggressive) { /* tst */
 		int mypid = getpid();
-		setpriority(PRIO_PROCESS,mypid,-20);
+		if(!param.quiet) fprintf(stderr,"Aggressively trying to increase priority.\n");
+		if(setpriority(PRIO_PROCESS,mypid,-20))
+			error("Failed to aggressively increase priority.\n");
 	}
 #endif
 
@@ -999,11 +1017,12 @@ int main(int sys_argc, char ** sys_argv)
 	  memset(&sp, 0, sizeof(struct sched_param));
 	  sp.sched_priority = sched_get_priority_min(SCHED_FIFO);
 	  if (sched_setscheduler(0, SCHED_RR, &sp) == -1)
-	    fprintf(stderr,"Can't get real-time priority\n");
+	    error("Can't get realtime priority\n");
 	}
 #endif
 
-#ifdef HAVE_WINDOWS_H
+/* make sure not Cygwin, it doesn't need it */
+#if defined(WIN32) && defined(HAVE_WINDOWS_H)
 	/* argument "3" is equivalent to realtime priority class */
 	win32_set_priority( param.realtime ? 3 : param.w32_priority);
 #endif
@@ -1027,9 +1046,12 @@ int main(int sys_argc, char ** sys_argv)
 		if(param.term_ctrl)
 			term_init();
 #endif
+	if(APPFLAG(MPG123APP_CONTINUE)) frames_left = param.frame_number;
+
 	while ((fname = get_next_file()))
 	{
 		char *dirname, *filename;
+		int newdir;
 		/* skip_tracks includes the previous one. */
 		if(skip_tracks) --skip_tracks;
 		if(skip_tracks)
@@ -1049,7 +1071,8 @@ int main(int sys_argc, char ** sys_argv)
 #endif
 			output_unpause(ao);
 		}
-		frames_left = param.frame_number;
+		if(!APPFLAG(MPG123APP_CONTINUE)) frames_left = param.frame_number;
+
 		debug1("Going to play %s", strcmp(fname, "-") ? fname : "standard input");
 
 		if(intflag || !open_track(fname))
@@ -1057,10 +1080,13 @@ int main(int sys_argc, char ** sys_argv)
 #ifdef HAVE_TERMIOS
 			/* We need the opportunity to cancel in case of --loop -1 . */
 			if(param.term_ctrl) term_control(mh, ao);
+			else
 #endif
 			/* No wait for a second interrupt before we started playing. */
 			if(intflag) break;
 
+			/* We already interrupted this cycle, start fresh with the next one. */
+			intflag = FALSE;
 			continue;
 		}
 
@@ -1079,6 +1105,8 @@ int main(int sys_argc, char ** sys_argv)
 		if(param.start_frame > 0)
 		framenum = mpg123_seek_frame(mh, param.start_frame, SEEK_SET);
 
+		if(APPFLAG(MPG123APP_CONTINUE)) param.start_frame = 0;
+
 		if(framenum < 0)
 		{
 			error1("Initial seek failed: %s", mpg123_strerror(mh));
@@ -1092,11 +1120,12 @@ int main(int sys_argc, char ** sys_argv)
 			continue;
 		}
 
+		/* Prinout and xterm title need this, possibly independently. */
+		newdir = split_dir_file(fname ? fname : "standard input", &dirname, &filename);
+
 		if (!param.quiet)
 		{
-			if (split_dir_file(fname ? fname : "standard input",
-				&dirname, &filename))
-				fprintf(stderr, "Directory: %s\n", dirname);
+			if(newdir) fprintf(stderr, "Directory: %s\n", dirname);
 
 #ifdef HAVE_TERMIOS
 		/* Reminder about terminal usage. */
@@ -1107,20 +1136,25 @@ int main(int sys_argc, char ** sys_argv)
 			fprintf(stderr, "Playing MPEG stream %lu of %lu: %s ...\n", (unsigned long)pl.pos, (unsigned long)pl.fill, filename);
 			if(htd.icy_name.fill) fprintf(stderr, "ICY-NAME: %s\n", htd.icy_name.p);
 			if(htd.icy_url.fill)  fprintf(stderr, "ICY-URL: %s\n",  htd.icy_url.p);
-
+		}
 #if !defined(GENERIC)
 {
 	const char *term_type;
 	term_type = getenv("TERM");
-	if (term_type && param.xterm_title &&
-	    (!strncmp(term_type,"xterm",5) || !strncmp(term_type,"rxvt",4)))
+	if(term_type && param.xterm_title)
 	{
+		if(!strncmp(term_type,"xterm",5) || !strncmp(term_type,"rxvt",4))
 		fprintf(stderr, "\033]0;%s\007", filename);
+		else if(!strncmp(term_type,"screen",6))
+		fprintf(stderr, "\033k%s\033\\", filename);
+		else if(!strncmp(term_type,"iris-ansi",9))
+		fprintf(stderr, "\033P1.y %s\033\\\033P3.y%s\033\\", filename, filename);
+
+		fflush(stderr); /* Paranoia: will the buffer buffer the escapes? */
 	}
 }
 #endif
 
-		}
 /* Rethink that SIGINT logic... */
 #if !defined(WIN32) && !defined(GENERIC)
 #ifdef HAVE_TERMIOS
@@ -1135,7 +1169,12 @@ int main(int sys_argc, char ** sys_argv)
 			if(param.frame_number > -1)
 			{
 				debug1("frames left: %li", (long) frames_left);
-				if(!frames_left) break;
+				if(!frames_left)
+				{
+					if(APPFLAG(MPG123APP_CONTINUE)) end_of_files = TRUE;
+
+					break;
+				}
 			}
 			if(!play_frame()) break;
 			if(!param.quiet)
@@ -1180,7 +1219,7 @@ int main(int sys_argc, char ** sys_argv)
 	}
 	else if(param.verbose) fprintf(stderr, "\n");
 
-	mpg123_close(mh);
+	close_track();
 
 	if (intflag)
 	{
@@ -1191,14 +1230,23 @@ int main(int sys_argc, char ** sys_argv)
 #ifndef NOXFERMEM
         if(!param.smooth && param.usebuffer) buffer_resync();
 #endif
-      }
-    } /* end of loop over input files */
+	}
+
+		if(end_of_files) break;
+	} /* end of loop over input files */
+
 	/* Ensure we played everything. */
 	if(param.smooth && param.usebuffer)
 	{
 		buffer_drain();
 		buffer_resync();
 	}
+
+	if(APPFLAG(MPG123APP_CONTINUE))
+	{
+		continue_msg("CONTINUE");
+	}
+
 	/* Free up memory used by playlist */    
 	if(!param.remote) free_playlist();
 
@@ -1210,7 +1258,7 @@ static void print_title(FILE *o)
 {
 	fprintf(o, "High Performance MPEG 1.0/2.0/2.5 Audio Player for Layers 1, 2 and 3\n");
 	fprintf(o, "\tversion %s; written and copyright by Michael Hipp and others\n", PACKAGE_VERSION);
-	fprintf(o, "\tfree software (LGPL/GPL) without any warranty but with best wishes\n");
+	fprintf(o, "\tfree software (LGPL) without any warranty but with best wishes\n");
 }
 
 static void usage(int err)  /* print syntax & exit */
@@ -1226,19 +1274,12 @@ static void usage(int err)  /* print syntax & exit */
 	fprintf(o,"supported options [defaults in brackets]:\n");
 	fprintf(o,"   -v    increase verbosity level       -q    quiet (don't print title)\n");
 	fprintf(o,"   -t    testmode (no output)           -s    write to stdout\n");
-	fprintf(o,"   -w <filename> write Output as WAV file\n");
+	fprintf(o,"   -w f  write output as WAV file\n");
 	fprintf(o,"   -k n  skip first n frames [0]        -n n  decode only n frames [all]\n");
 	fprintf(o,"   -c    check range violations         -y    DISABLE resync on errors\n");
 	fprintf(o,"   -b n  output buffer: n Kbytes [0]    -f n  change scalefactor [%li]\n", param.outscale);
 	fprintf(o,"   -r n  set/force samplerate [auto]\n");
-	fprintf(o,"   -os,-ol,-oh  output to built-in speaker,line-out connector,headphones\n");
-	#ifdef NAS
-	fprintf(o,"                                        -a d  set NAS server\n");
-	#elif defined(SGI)
-	fprintf(o,"                                        -a [1..4] set RAD device\n");
-	#else
-	fprintf(o,"                                        -a d  set audio device\n");
-	#endif
+	fprintf(o,"   -o m  select output module           -a d  set audio device\n");
 	fprintf(o,"   -2    downsample 1:2 (22 kHz)        -4    downsample 1:4 (11 kHz)\n");
 	fprintf(o,"   -d n  play every n'th frame only     -h n  play every frame n times\n");
 	fprintf(o,"   -0    decode channel 0 (left) only   -1    decode channel 1 (right) only\n");
@@ -1250,9 +1291,13 @@ static void usage(int err)  /* print syntax & exit */
 	#endif
 	fprintf(o,"   -z    shuffle play (with wildcards)  -Z    random play\n");
 	fprintf(o,"   -u a  HTTP authentication string     -E f  Equalizer, data from file\n");
+#ifdef HAVE_TERMIOS
 	fprintf(o,"   -C    enable control keys            --no-gapless  not skip junk/padding in mp3s\n");
+#else
+	fprintf(o,"                                        --no-gapless  not skip junk/padding in mp3s\n");
+#endif
 	fprintf(o,"   -?    this help                      --version  print name + version\n");
-	fprintf(o,"See the manpage %s(1) or call %s with --longhelp for more parameters and information.\n", prgName,prgName);
+	fprintf(o,"See the manpage "PACKAGE_NAME"(1) or call %s with --longhelp for more parameters and information.\n", prgName);
 	safe_exit(err);
 }
 
@@ -1282,8 +1327,10 @@ static void long_usage(int err)
 	fprintf(o," -p <f> --proxy <f>        set WWW proxy\n");
 	fprintf(o," -u     --auth             set auth values for HTTP access\n");
 	fprintf(o,"        --ignore-mime      ignore HTTP MIME types (content-type)\n");
+	fprintf(o,"        --no-seekbuffer    disable seek buffer\n");
 	fprintf(o," -@ <f> --list <f>         play songs in playlist <f> (plain list, m3u, pls (shoutcast))\n");
 	fprintf(o," -l <n> --listentry <n>    play nth title in playlist; show whole playlist for n < 0\n");
+	fprintf(o,"        --continue         playlist continuation mode (see man page)\n");
 	fprintf(o,"        --loop <n>         loop track(s) <n> times, < 0 means infinite loop (not with --random!)\n");
 	fprintf(o,"        --keep-open        (--remote mode only) keep loaded file open after reaching end\n");
 	fprintf(o,"        --timeout <n>      Timeout in seconds before declaring a stream dead (if <= 0, wait forever)\n");
@@ -1300,7 +1347,7 @@ static void long_usage(int err)
 	fprintf(o,"\noutput/processing options\n\n");
 	fprintf(o," -o <o> --output <o>       select audio output module\n");
 	fprintf(o,"        --list-modules     list the available modules\n");
-	fprintf(o," -a <d> --audiodevice <d>  select audio device\n");
+	fprintf(o," -a <d> --audiodevice <d>  select audio device (depending on chosen module)\n");
 	fprintf(o," -s     --stdout           write raw audio to stdout (host native format)\n");
 	fprintf(o," -S     --STDOUT           play AND output stream (not implemented yet)\n");
 	fprintf(o," -w <f> --wav <f>          write samples as WAV file in <f> (- is stdout)\n");
@@ -1364,7 +1411,7 @@ static void long_usage(int err)
 	fprintf(o,"                           (default is for next track)\n");
 	#endif
 	#ifndef GENERIC
-	fprintf(o,"        --title            set xterm/rxvt title to filename\n");
+	fprintf(o,"        --title            set terminal title to filename\n");
 	#endif
 	fprintf(o,"        --long-tag         spacy id3 display with every item on a separate line\n");
 	fprintf(o,"        --lyrics           show lyrics (from ID3v2 USLT frame)\n");
@@ -1389,7 +1436,7 @@ static void long_usage(int err)
 	fprintf(o,"        --longhelp         give this long help listing\n");
 	fprintf(o,"        --version          give name / version string\n");
 
-	fprintf(o,"\nSee the manpage %s(1) for more information.\n", prgName);
+	fprintf(o,"\nSee the manpage "PACKAGE_NAME"(1) for more information.\n");
 	safe_exit(err);
 }
 
@@ -1402,4 +1449,9 @@ static void give_version(char* arg)
 {
 	fprintf(stdout, PACKAGE_NAME" "PACKAGE_VERSION"\n");
 	safe_exit(0);
+}
+
+void continue_msg(const char *name)
+{
+		fprintf(aux_out, "\n[%s] track %"SIZE_P" frame %"OFF_P"\n", name,  (size_p)pl.pos, (off_p)framenum);
 }

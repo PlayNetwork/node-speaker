@@ -272,6 +272,19 @@ static const struct enc_desc encdesc[] =
 };
 #define KNOWN_ENCS (sizeof(encdesc)/sizeof(struct enc_desc))
 
+int audio_enc_name2code(const char* name)
+{
+	int code = 0;
+	int i;
+	for(i=0;i<KNOWN_ENCS;++i)
+	if(!strncasecmp(encdesc[i].name, name, encdesc[i].nlen))
+	{
+		code = encdesc[i].code;
+		break;
+	}
+	return code;
+}
+
 void audio_enclist(char** list)
 {
 	size_t length = 0;
@@ -615,6 +628,8 @@ int open_output(audio_output_t *ao)
 		error("ao should not be NULL here!");
 		exit(110);
 	}
+
+	ao->framesize = ao->channels * mpg123_encsize(ao->format);
 
 	switch(param.outmode)
 	{

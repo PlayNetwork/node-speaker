@@ -10,6 +10,12 @@
 /* Define if building universal (internal helper macro) */
 #undef AC_APPLE_UNIVERSAL_BUILD
 
+/* Define if .balign is present. */
+#undef ASMALIGN_BALIGN
+
+/* Define if .align just takes byte count. */
+#undef ASMALIGN_BYTE
+
 /* Define if .align takes 3 for alignment of 2^3=8 bytes instead of 8. */
 #undef ASMALIGN_EXP
 
@@ -24,6 +30,9 @@
 
 /* Define if building with dynamcally linked libmpg123 */
 #undef DYNAMIC_BUILD
+
+/* Use EFBIG as substitude for EOVERFLOW, mingw.org may lack the latter */
+#undef EOVERFLOW
 
 /* Define if FIFO support is enabled. */
 #undef FIFO
@@ -253,12 +262,11 @@
 /* Define if IPV6 support is enabled. */
 #undef IPV6
 
-/* Define this to the size of long type in bits, used for LFS small/native
-   alias functions. */
+/* Define this to the size of native offset type in bits, used for LFS alias
+   functions. */
 #undef LFS_ALIAS_BITS
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
 
 /* The suffix for module files. */
@@ -313,6 +321,9 @@
 /* Define to disable string functions. */
 #undef NO_STRING
 
+/* Define for post-processed 32 bit formats. */
+#undef NO_SYNTH32
+
 /* Define to disable warning messages. */
 #undef NO_WARNING
 
@@ -360,6 +371,12 @@
 
 /* Define if modules are enabled */
 #undef USE_MODULES
+
+/* Define for new Huffman decoding scheme. */
+#undef USE_NEW_HUFFTABLE
+
+/* Define to use yasm for assemble AVX sources. */
+#undef USE_YASM_FOR_AVX
 
 /* Version number of package */
 #undef VERSION
@@ -416,6 +433,12 @@
 
 /* Define to `int' if <sys/types.h> does not define. */
 #undef int32_t
+
+/* Define to `long long' if <sys/types.h> does not define. */
+#undef int64_t
+
+/* Define to the native offset type (long or actually off_t). */
+#undef lfs_alias_t
 
 /* Define to `long int' if <sys/types.h> does not define. */
 #undef off_t
