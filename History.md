@@ -3,6 +3,7 @@
 
   * update "nan" to v2.3.3
   * update libmpg123 to v1.22.4
+  * emit error instead of throw
 
 0.3.0 / 2016-04-09
 ==================

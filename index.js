@@ -127,7 +127,8 @@ inherits(Speaker, Writable);
 Speaker.prototype._open = function () {
   debug('open()');
   if (this.audio_handle) {
-    throw new Error('_open() called more than once!');
+    this.emit('error', new Error('_open() called more than once!'));
+    return;
   }
   // set default options, if not set
   if (null == this.channels) {
@@ -150,11 +151,15 @@ Speaker.prototype._open = function () {
 
   var format = exports.getFormat(this);
   if (null == format) {
-    throw new Error('invalid PCM format specified');
+    this.emit('error', new Error('invalid PCM format specified'));
+    return;
   }
 
   if (!exports.isSupported(format)) {
-    throw new Error('specified PCM format is not supported by "' + binding.name + '" backend');
+    this.emit(
+      'error',
+      new Error('specified PCM format is not supported by "' + binding.name + '" backend'));
+    return;
   }
 
   // calculate the "block align"
@@ -165,7 +170,7 @@ Speaker.prototype._open = function () {
   this.audio_handle = new Buffer(binding.sizeof_audio_output_t);
   var r = binding.open(this.audio_handle, this.channels, this.sampleRate, format);
   if (0 !== r) {
-    throw new Error('open() failed: ' + r);
+    this.emit('error', new Error('open() failed: ' + r));
   }
 
   this.emit('open');
