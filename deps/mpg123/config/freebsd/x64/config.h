@@ -27,7 +27,7 @@
 /* #undef DEBUG */
 
 /* The default audio output module(s) to use */
-#define DEFAULT_OUTPUT_MODULE "oss"
+#define DEFAULT_OUTPUT_MODULE "coreaudio"
 
 /* Define if building with dynamcally linked libmpg123 */
 #define DYNAMIC_BUILD 1
@@ -72,13 +72,13 @@
 /* #undef HAVE_AUDIOS_H */
 
 /* Define to 1 if you have the <AudioToolbox/AudioToolbox.h> header file. */
-/* #undef HAVE_AUDIOTOOLBOX_AUDIOTOOLBOX_H */
+#define HAVE_AUDIOTOOLBOX_AUDIOTOOLBOX_H 1
 
 /* Define to 1 if you have the <AudioUnit/AudioUnit.h> header file. */
-/* #undef HAVE_AUDIOUNIT_AUDIOUNIT_H */
+#define HAVE_AUDIOUNIT_AUDIOUNIT_H 1
 
 /* Define to 1 if you have the <CoreServices/CoreServices.h> header file. */
-/* #undef HAVE_CORESERVICES_CORESERVICES_H */
+#define HAVE_CORESERVICES_CORESERVICES_H 1
 
 /* Define to 1 if you have the <CUlib.h> header file. */
 /* #undef HAVE_CULIB_H */
@@ -108,7 +108,7 @@
 #define HAVE_LIBM 1
 
 /* Define to 1 if you have the `mx' library (-lmx). */
-/* #undef HAVE_LIBMX */
+#define HAVE_LIBMX 1
 
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
@@ -147,10 +147,10 @@
 #define HAVE_NL_LANGINFO 1
 
 /* Define to 1 if you have the <OpenAL/alc.h> header file. */
-/* #undef HAVE_OPENAL_ALC_H */
+#define HAVE_OPENAL_ALC_H 1
 
 /* Define to 1 if you have the <OpenAL/al.h> header file. */
-/* #undef HAVE_OPENAL_AL_H */
+#define HAVE_OPENAL_AL_H 1
 
 /* Define to 1 if you have the <os2me.h> header file. */
 /* #undef HAVE_OS2ME_H */
@@ -165,7 +165,7 @@
 #define HAVE_SCHED_H 1
 
 /* Define to 1 if you have the `sched_setscheduler' function. */
-#define HAVE_SCHED_SETSCHEDULER 1
+/* #undef HAVE_SCHED_SETSCHEDULER */
 
 /* Define to 1 if you have the `setlocale' function. */
 #define HAVE_SETLOCALE 1
@@ -228,7 +228,7 @@
 #define HAVE_SYS_SOCKET_H 1
 
 /* Define to 1 if you have the <sys/soundcard.h> header file. */
-#define HAVE_SYS_SOUNDCARD_H 1
+/* #undef HAVE_SYS_SOUNDCARD_H */
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
@@ -338,7 +338,7 @@
 #define PACKAGE_NAME "mpg123"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "mpg123 1.22.2"
+#define PACKAGE_STRING "mpg123 1.22.4"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "mpg123"
@@ -347,7 +347,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.22.2"
+#define PACKAGE_VERSION "1.22.4"
 
 /* Define if portaudio v18 API is wanted. */
 /* #undef PORTAUDIO18 */
@@ -380,7 +380,7 @@
 /* #undef USE_YASM_FOR_AVX */
 
 /* Version number of package */
-#define VERSION "1.22.2"
+#define VERSION "1.22.4"
 
 /* Define to use Win32 named pipes */
 /* #undef WANT_WIN32_FIFO */

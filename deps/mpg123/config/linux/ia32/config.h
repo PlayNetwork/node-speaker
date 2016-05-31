@@ -11,6 +11,12 @@
 /* Define if building universal (internal helper macro) */
 /* #undef AC_APPLE_UNIVERSAL_BUILD */
 
+/* Define if .balign is present. */
+#define ASMALIGN_BALIGN 1
+
+/* Define if .align just takes byte count. */
+/* #undef ASMALIGN_BYTE */
+
 /* Define if .align takes 3 for alignment of 2^3=8 bytes instead of 8. */
 /* #undef ASMALIGN_EXP */
 
@@ -21,10 +27,13 @@
 /* #undef DEBUG */
 
 /* The default audio output module(s) to use */
-#define DEFAULT_OUTPUT_MODULE "oss"
+#define DEFAULT_OUTPUT_MODULE "coreaudio"
 
 /* Define if building with dynamcally linked libmpg123 */
-/* #undef DYNAMIC_BUILD */
+#define DYNAMIC_BUILD 1
+
+/* Use EFBIG as substitude for EOVERFLOW, mingw.org may lack the latter */
+/* #undef EOVERFLOW */
 
 /* Define if FIFO support is enabled. */
 #define FIFO 1
@@ -63,19 +72,22 @@
 /* #undef HAVE_AUDIOS_H */
 
 /* Define to 1 if you have the <AudioToolbox/AudioToolbox.h> header file. */
-/* #undef HAVE_AUDIOTOOLBOX_AUDIOTOOLBOX_H */
+#define HAVE_AUDIOTOOLBOX_AUDIOTOOLBOX_H 1
 
 /* Define to 1 if you have the <AudioUnit/AudioUnit.h> header file. */
-/* #undef HAVE_AUDIOUNIT_AUDIOUNIT_H */
+#define HAVE_AUDIOUNIT_AUDIOUNIT_H 1
 
 /* Define to 1 if you have the <CoreServices/CoreServices.h> header file. */
-/* #undef HAVE_CORESERVICES_CORESERVICES_H */
+#define HAVE_CORESERVICES_CORESERVICES_H 1
 
 /* Define to 1 if you have the <CUlib.h> header file. */
 /* #undef HAVE_CULIB_H */
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
+
+/* Define if getaddrinfo accepts the AI_ADDRCONFIG flag */
+#define HAVE_GAI_ADDRCONFIG 1
 
 /* Define to 1 if you have the `getaddrinfo' function. */
 #define HAVE_GETADDRINFO 1
@@ -96,13 +108,13 @@
 #define HAVE_LIBM 1
 
 /* Define to 1 if you have the `mx' library (-lmx). */
-/* #undef HAVE_LIBMX */
+#define HAVE_LIBMX 1
 
 /* Define to 1 if you have the <limits.h> header file. */
 #define HAVE_LIMITS_H 1
 
 /* Define to 1 if you have the <linux/soundcard.h> header file. */
-#define HAVE_LINUX_SOUNDCARD_H 1
+/* #undef HAVE_LINUX_SOUNDCARD_H */
 
 /* Define to 1 if you have the <locale.h> header file. */
 #define HAVE_LOCALE_H 1
@@ -135,10 +147,10 @@
 #define HAVE_NL_LANGINFO 1
 
 /* Define to 1 if you have the <OpenAL/alc.h> header file. */
-/* #undef HAVE_OPENAL_ALC_H */
+#define HAVE_OPENAL_ALC_H 1
 
 /* Define to 1 if you have the <OpenAL/al.h> header file. */
-/* #undef HAVE_OPENAL_AL_H */
+#define HAVE_OPENAL_AL_H 1
 
 /* Define to 1 if you have the <os2me.h> header file. */
 /* #undef HAVE_OS2ME_H */
@@ -153,7 +165,7 @@
 #define HAVE_SCHED_H 1
 
 /* Define to 1 if you have the `sched_setscheduler' function. */
-#define HAVE_SCHED_SETSCHEDULER 1
+/* #undef HAVE_SCHED_SETSCHEDULER */
 
 /* Define to 1 if you have the `setlocale' function. */
 #define HAVE_SETLOCALE 1
@@ -216,7 +228,7 @@
 #define HAVE_SYS_SOCKET_H 1
 
 /* Define to 1 if you have the <sys/soundcard.h> header file. */
-#define HAVE_SYS_SOUNDCARD_H 1
+/* #undef HAVE_SYS_SOUNDCARD_H */
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
@@ -251,12 +263,11 @@
 /* Define if IPV6 support is enabled. */
 #define IPV6 1
 
-/* Define this to the size of long type in bits, used for LFS small/native
-   alias functions. */
-#define LFS_ALIAS_BITS 32
+/* Define this to the size of native offset type in bits, used for LFS alias
+   functions. */
+#define LFS_ALIAS_BITS 64
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #define LT_OBJDIR ".libs/"
 
 /* The suffix for module files. */
@@ -311,6 +322,9 @@
 /* Define to disable string functions. */
 /* #undef NO_STRING */
 
+/* Define for post-processed 32 bit formats. */
+/* #undef NO_SYNTH32 */
+
 /* Define to disable warning messages. */
 /* #undef NO_WARNING */
 
@@ -324,7 +338,7 @@
 #define PACKAGE_NAME "mpg123"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "mpg123 1.14.4"
+#define PACKAGE_STRING "mpg123 1.22.4"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "mpg123"
@@ -333,7 +347,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.14.4"
+#define PACKAGE_VERSION "1.22.4"
 
 /* Define if portaudio v18 API is wanted. */
 /* #undef PORTAUDIO18 */
@@ -342,16 +356,16 @@
 #define SIZEOF_INT32_T 4
 
 /* The size of `long', as computed by sizeof. */
-#define SIZEOF_LONG 4
+#define SIZEOF_LONG 8
 
 /* The size of `off_t', as computed by sizeof. */
 #define SIZEOF_OFF_T 8
 
 /* The size of `size_t', as computed by sizeof. */
-#define SIZEOF_SIZE_T 4
+#define SIZEOF_SIZE_T 8
 
 /* The size of `ssize_t', as computed by sizeof. */
-#define SIZEOF_SSIZE_T 4
+#define SIZEOF_SSIZE_T 8
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
@@ -359,8 +373,14 @@
 /* Define if modules are enabled */
 /* #undef USE_MODULES */
 
+/* Define for new Huffman decoding scheme. */
+#define USE_NEW_HUFFTABLE 1
+
+/* Define to use yasm for assemble AVX sources. */
+/* #undef USE_YASM_FOR_AVX */
+
 /* Version number of package */
-#define VERSION "1.14.4"
+#define VERSION "1.22.4"
 
 /* Define to use Win32 named pipes */
 /* #undef WANT_WIN32_FIFO */
@@ -386,8 +406,13 @@
 # endif
 #endif
 
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
+#endif
+
 /* Number of bits in a file offset, on hosts where this is settable. */
-#define _FILE_OFFSET_BITS 64
+/* #undef _FILE_OFFSET_BITS */
 
 /* Define for large files, on AIX-style hosts. */
 /* #undef _LARGE_FILES */
@@ -409,6 +434,12 @@
 
 /* Define to `int' if <sys/types.h> does not define. */
 /* #undef int32_t */
+
+/* Define to `long long' if <sys/types.h> does not define. */
+/* #undef int64_t */
+
+/* Define to the native offset type (long or actually off_t). */
+#define lfs_alias_t off_t
 
 /* Define to `long int' if <sys/types.h> does not define. */
 /* #undef off_t */
