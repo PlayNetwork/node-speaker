@@ -114,7 +114,7 @@ describe('Speaker', function () {
       assert.equal('invalid PCM format specified', err.message);
       done();
     });
-    speaker.write('a');
+    speaker._open();
   });
 
 });
