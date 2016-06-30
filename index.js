@@ -333,25 +333,41 @@ Speaker.prototype._flush = function () {
  * @api public
  */
 
-Speaker.prototype.close = function (flush) {
-  debug('close(%o)', flush);
-  if (this._closed) return debug('already closed...');
-
-  if (this.audio_handle) {
-    if (false !== flush) {
-      // TODO: async most likely…
-      debug('invoking flush() native binding');
-      binding.flush(this.audio_handle);
-    }
-
-    // TODO: async maybe?
-    debug('invoking close() native binding');
-    binding.close(this.audio_handle);
-    this.audio_handle = null;
-  } else {
-    debug('not invoking flush() or close() bindings since no `audio_handle`');
+Speaker.prototype.close = function (flush, callback) {
+  if (typeof flush === 'function') {
+    callback = flush;
+    flush = true;
   }
 
-  this._closed = true;
-  this.emit('close');
+  callback = callback || function () {};
+
+  debug('close(%o, %o)', flush, callback);
+
+  if (this._closed) {
+    debug('already closed...');
+    return callback();
+  }
+
+  if (!this.audio_handle) {
+    debug('not invoking flush() or close() bindings since no `audio_handle`');
+    this._closed = true;
+    return callback();
+  }
+
+  if (false !== flush) {
+    // TODO: async most likely…
+    debug('invoking flush() native binding');
+    binding.flush(this.audio_handle);
+  }
+
+  debug('invoking close() native binding');
+  binding.close(this.audio_handle, function (r) {
+    debug('close result(%0)', r);
+
+    this.audio_handle = null;
+    this._closed = true;
+    this.emit('close');
+
+    return callback();
+  });
 };

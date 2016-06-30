@@ -12,6 +12,13 @@ extern mpg123_module_t mpg123_output_module_info;
 
 namespace {
 
+struct close_req {
+  uv_work_t req;
+  audio_output_t *ao;
+  int r;
+  Nan::Callback *callback;
+};
+
 struct write_req {
   uv_work_t req;
   audio_output_t *ao;
@@ -90,15 +97,43 @@ NAN_METHOD(Flush) {
   info.GetReturnValue().SetUndefined();
 }
 
+void close_async (uv_work_t *req);
+void close_after (uv_work_t *req);
+
 NAN_METHOD(Close) {
-  Nan::EscapableHandleScope scope;
+  Nan::HandleScope scope;
   audio_output_t *ao = UnwrapPointer<audio_output_t *>(info[0]);
-  ao->close(ao);
-  int r = 0;
-  if (ao->deinit) {
-    r = ao->deinit(ao);
+
+  close_req *req = new close_req;
+  req->r = 0;
+  req->callback = new Nan::Callback(info[1].As<Function>());
+
+  req->req.data = req;
+
+  uv_queue_work(uv_default_loop(), &req->req, close_async, (uv_after_work_cb)close_after);
+
+  info.GetReturnValue().SetUndefined();
+}
+
+void close_async (uv_work_t *req) {
+  close_req *creq = reinterpret_cast<close_req *>(req->data);
+  creq->ao->close(creq->ao);
+  if (creq->ao->deinit) {
+    creq->r = creq->ao->deinit(creq->ao);
   }
-  info.GetReturnValue().Set(scope.Escape(Nan::New<v8::Integer>(r)));
+}
+
+void close_after (uv_work_t *req) {
+  Nan::HandleScope scope;
+  close_req *creq = reinterpret_cast<close_req *>(req->data);
+
+  Local<Value> argv[] = {
+    Nan::New(creq->r)
+  };
+
+  creq->callback->Call(1, argv);
+
+  delete creq->callback;
 }
 
 void Initialize(Handle<Object> target) {
