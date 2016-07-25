@@ -86,35 +86,55 @@ exports.isSupported = function isSupported (format) {
  */
 
 function Speaker (opts) {
-  if (!(this instanceof Speaker)) return new Speaker(opts);
+	var _this = this;
+
+  if (!(_this instanceof Speaker)) return new Speaker(opts);
 
   // default lwm and hwm to 0
-  if (!opts) opts = {};
-  if (null == opts.lowWaterMark) opts.lowWaterMark = 0;
-  if (null == opts.highWaterMark) opts.highWaterMark = 0;
+  if (!opts) {
+		opts = {};
+	}
 
-  Writable.call(this, opts);
+  if (null == opts.lowWaterMark) {
+		opts.lowWaterMark = 0;
+	}
+
+  if (null == opts.highWaterMark) {
+		opts.highWaterMark = 0;
+	}
+
+  Writable.call(_this, opts);
 
   // chunks are sent over to the backend in "samplesPerFrame * blockAlign" size.
   // this is necessary because if we send too big of chunks at once, then there
   // won't be any data ready when the audio callback comes (experienced with the
   // CoreAudio backend)
-  this.samplesPerFrame = 1024;
+  _this.samplesPerFrame = 1024;
 
   // the `audio_output_t` struct pointer Buffer instance
-  this.audio_handle = null;
+  _this.audio_handle = null;
 
   // flipped after close() is called, no write() calls allowed after
-  this._closed = false;
+  _this._closed = false;
 
   // set PCM format
-  this._format(opts);
+  _this._format(opts);
 
   // bind event listeners
-  this._format = this._format.bind(this);
-  this.on('finish', this._flush);
-  this.on('pipe', this._pipe);
-  this.on('unpipe', this._unpipe);
+  _this._format = this._format.bind(this);
+
+	_this.on('finish', _this.close);
+
+  _this.on('pipe', function (source) {
+    debug('pipe()');
+    _this._format(source);
+    source.once('format', _this._format);
+  });
+
+  _this.on('unpipe', function (source) {
+    debug('unpipe()');
+    source.removeListener('format', _this._format);
+  });
 }
 inherits(Speaker, Writable);
 
@@ -285,46 +305,6 @@ Speaker.prototype._write = function (chunk, encoding, done) {
 };
 
 /**
- * Called when this stream is pipe()d to from another readable stream.
- * If the "sampleRate", "channels", "bitDepth", and "signed" properties are
- * set, then they will be used over the currently set values.
- *
- * @api private
- */
-
-Speaker.prototype._pipe = function (source) {
-  debug('_pipe()');
-  this._format(source);
-  source.once('format', this._format);
-};
-
-/**
- * Called when this stream is pipe()d to from another readable stream.
- * If the "sampleRate", "channels", "bitDepth", and "signed" properties are
- * set, then they will be used over the currently set values.
- *
- * @api private
- */
-
-Speaker.prototype._unpipe = function (source) {
-  debug('_unpipe()');
-  source.removeListener('format', this._format);
-};
-
-/**
- * Emits a "flush" event and then calls the `.close()` function on
- * this Speaker instance.
- *
- * @api private
- */
-
-Speaker.prototype._flush = function () {
-  debug('_flush()');
-  this.emit('flush');
-  this.close(false);
-};
-
-/**
  * Closes the audio backend. Normally this function will be called automatically
  * after the audio backend has finished playing the audio buffer through the
  * speakers.
@@ -333,40 +313,43 @@ Speaker.prototype._flush = function () {
  * @api public
  */
 
-Speaker.prototype.close = function (flush, callback) {
-  if (typeof flush === 'function') {
-    callback = flush;
-    flush = true;
+Speaker.prototype.close = function (immediate, callback) {
+	var _this = this;
+
+  if (typeof immediate === 'function') {
+    callback = immediate;
+    immediate = false;
   }
 
   callback = callback || function () {};
+	immediate = typeof immediate === 'undefined' ? false : immediate;
 
-  debug('close(%o, %o)', flush, callback);
+  debug('close(%o, %o)', immediate, callback);
 
-  if (this._closed) {
+  if (_this._closed) {
     debug('already closed...');
     return callback();
   }
 
-  if (!this.audio_handle) {
+  if (!_this.audio_handle) {
     debug('not invoking flush() or close() bindings since no `audio_handle`');
-    this._closed = true;
+    _this._closed = true;
     return callback();
   }
 
-  if (false !== flush) {
+  if (false !== immediate) {
     // TODO: async most likely…
     debug('invoking flush() native binding');
-    binding.flush(this.audio_handle);
+    binding.flush(_this.audio_handle);
   }
 
   debug('invoking close() native binding');
-  binding.close(this.audio_handle, function (r) {
-    debug('close result(%0)', r);
+  binding.close(_this.audio_handle, function (r) {
+    debug('close result(%o)', r);
 
-    this.audio_handle = null;
-    this._closed = true;
-    this.emit('close');
+    _this.audio_handle = null;
+    _this._closed = true;
+    _this.emit('close');
 
     return callback();
   });
