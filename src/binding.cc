@@ -105,6 +105,7 @@ NAN_METHOD(Close) {
   audio_output_t *ao = UnwrapPointer<audio_output_t *>(info[0]);
 
   close_req *req = new close_req;
+  req->ao = ao;
   req->r = 0;
   req->callback = new Nan::Callback(info[1].As<Function>());
 
