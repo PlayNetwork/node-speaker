@@ -56,17 +56,6 @@ describe('Speaker', function () {
     s.write(Buffer(0));
   });
 
-  it('should emit a "flush" event after end()', function (done) {
-    var s = new Speaker();
-    var called = false;
-    s.on('flush', function () {
-      called = true;
-      done();
-    });
-    assert.equal(called, false);
-    s.end(Buffer(0));
-  });
-
   it('should emit a "close" event after end()', function (done) {
     this.slow(1000);
     var s = new Speaker();
@@ -82,15 +71,20 @@ describe('Speaker', function () {
   it('should only emit one "close" event', function (done) {
     var s = new Speaker();
     var count = 0;
+
     s.on('close', function () {
       count++;
     });
-    assert.equal(0, count);
-    s.close();
-    assert.equal(1, count);
-    s.close();
-    assert.equal(1, count);
-    done();
+
+    // force close
+    s.end(Buffer(0));
+
+    // try to re-close
+    s.close(function (r) {
+      assert.equal(1, count);
+
+      done();
+    });
   });
 
   it('should not throw an Error if native "endianness" is specified', function () {
