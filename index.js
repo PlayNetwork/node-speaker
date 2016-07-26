@@ -14,6 +14,10 @@ const
 module.exports = (function () {
 	'use strict';
 
+	function close (speaker, immediate, callback) {
+
+	}
+
 	function formatConstant (formatInfo) {
 		if (formatInfo.float) {
 			if (formatInfo.bitDepth === 32) {
@@ -50,6 +54,10 @@ module.exports = (function () {
 		}
 
 		return null;
+	}
+
+	function open (speaker) {
+
 	}
 
 	function prepareOutput (speaker, options) {
@@ -129,7 +137,7 @@ module.exports = (function () {
 			bytesToWrite,
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
 			handle = speaker._ao,
-			write = () => {
+			writeToHandle = () => {
 				if (speaker._closed) {
 					debug('aborting remainder of write() call (%o bytes), since speaker is `_closed`', left.length);
 					return done();
@@ -154,7 +162,7 @@ module.exports = (function () {
 
 					if (bytesRemaining) {
 						debug('%o bytes remaining in this chunk', bytesRemaining.length);
-						return write();
+						return writeToHandle();
 					}
 
 					debug('done with this chunk');
@@ -172,7 +180,7 @@ module.exports = (function () {
 		}
 
 		// write to the audio handle
-		write();
+		writeToHandle();
 	}
 
 	function Speaker (options) {
@@ -187,11 +195,14 @@ module.exports = (function () {
 
 		// initialize properties
 		prepareOutput(_this, options);
-		_this.format = prepareOutput.bind(_this);
 
-		// overrirde stream.Writable _write
+		// set instances methods
 		_this._write = write.bind(_this);
+		_this.close = close.bind(_this);
+		_this.format = prepareOutput.bind(_this);
+		_this.open = open.bind(_this);
 
+		// handle key events
 		_this.on('finish', function () {
 			debug('finish()');
 			_this.close();
@@ -225,74 +236,6 @@ module.exports = (function () {
 		version : [binding.api_version, binding.revision].join('.')
 	};
 }());
-
-
-/**
- * `_write()` callback for the Writable base class.
- *
- * @param {Buffer} chunk
- * @param {String} encoding
- * @param {Function} done
- * @api private
- */
-
-Speaker.prototype._write = function (chunk, encoding, done) {
-	debug(
-		'write() (%o bytes, %o encoding, %o callback)',
-		chunk.length,
-		encoding,
-		done);
-
-	if (this._closed) {
-		// close() has already been called. this should not be called
-		return done(new Error('write() call after close() call'));
-	}
-	var b;
-	var self = this;
-	var left = chunk;
-	var handle = this.audio_handle;
-	if (!handle) {
-		// this is the first time write() is being called; need to open()
-		try {
-			handle = this.open();
-		} catch (e) {
-			return done(e);
-		}
-	}
-	var chunkSize = this.blockAlign * this.samplesPerFrame;
-
-	function write () {
-		if (self._closed) {
-			debug('aborting remainder of write() call (%o bytes), since speaker is `_closed`', left.length);
-			return done();
-		}
-		b = left;
-		if (b.length > chunkSize) {
-			var t = b;
-			b = t.slice(0, chunkSize);
-			left = t.slice(chunkSize);
-		} else {
-			left = null;
-		}
-		debug('writing %o byte chunk', b.length);
-		binding.write(handle, b, b.length, onwrite);
-	}
-
-	function onwrite (r) {
-		debug('wrote %o bytes', r);
-		if (r != b.length) {
-			done(new Error('write() failed: ' + r));
-		} else if (left) {
-			debug('still %o bytes left in this chunk', left.length);
-			write();
-		} else {
-			debug('done with this chunk');
-			done();
-		}
-	}
-
-	write();
-};
 
 /**
  * Closes the audio backend. Normally this function will be called automatically
@@ -346,50 +289,6 @@ Speaker.prototype.close = function (immediate, callback) {
 
 		return callback();
 	});
-};
-
-/**
- * Set given PCM formatting options. Called during instantiation on the passed in
- * options object, on the stream given to the "pipe" event, and a final time if
- * that stream emits a "format" event.
- *
- * @param {Object} opts
- * @api private
- */
-
-Speaker.prototype.format = function (opts) {
-	debug('format(object keys = %o)', Object.keys(opts));
-	if (null != opts.channels) {
-		debug('setting %o: %o', 'channels', opts.channels);
-		this.channels = opts.channels;
-	}
-	if (null != opts.bitDepth) {
-		debug('setting %o: %o', "bitDepth", opts.bitDepth);
-		this.bitDepth = opts.bitDepth;
-	}
-	if (null != opts.sampleRate) {
-		debug('setting %o: %o', "sampleRate", opts.sampleRate);
-		this.sampleRate = opts.sampleRate;
-	}
-	if (null != opts.float) {
-		debug('setting %o: %o', "float", opts.float);
-		this.float = opts.float;
-	}
-	if (null != opts.signed) {
-		debug('setting %o: %o', "signed", opts.signed);
-		this.signed = opts.signed;
-	}
-	if (null != opts.samplesPerFrame) {
-		debug('setting %o: %o', "samplesPerFrame", opts.samplesPerFrame);
-		this.samplesPerFrame = opts.samplesPerFrame;
-	}
-	if (null == opts.endianness || endianness == opts.endianness) {
-		// no "endianness" specified or explicit native endianness
-		this.endianness = endianness;
-	} else {
-		// only native endianness is supported...
-		this.emit('error', new Error('only native endianness ("' + endianness + '") is supported, got "' + opts.endianness + '"'));
-	}
 };
 
 /**
