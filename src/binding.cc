@@ -19,6 +19,12 @@ struct close_req {
   Nan::Callback *callback;
 };
 
+struct flush_req {
+  uv_work_t req;
+  audio_output_t *ao;
+  Nan::Callback *callback;
+};
+
 struct write_req {
   uv_work_t req;
   audio_output_t *ao;
@@ -89,12 +95,40 @@ void write_after (uv_work_t *req) {
   delete wreq->callback;
 }
 
+void flush_async (uv_work_t *);
+void flush_after (uv_work_t *);
+
 NAN_METHOD(Flush) {
   Nan::HandleScope scope;
   audio_output_t *ao = UnwrapPointer<audio_output_t *>(info[0]);
-  /* TODO: async */
-  ao->flush(ao);
+
+  flush_req *req = new flush_req;
+  req->ao = ao;
+  req->callback = new Nan::Callback(info[0].As<Function>());
+
+  req->req.data = req;
+
+  uv_queue_work(uv_default_loop(), &req->req, flush_async, (uv_after_work_cb)flush_after);
+
   info.GetReturnValue().SetUndefined();
+}
+
+void flush_async (uv_work_t *req) {
+  flush_req *freq = reinterpret_cast<flush_req *>(req->data);
+  freq->ao->flush(freq->ao);
+}
+
+void flush_after (uv_work_t *req) {
+  Nan::HandleScope scope;
+  flush_req *freq = reinterpret_cast<flush_req *>(req->data);
+
+  Local<Value> argv[] = {
+    Nan::Undefined()
+  };
+
+  freq->callback->Call(1, argv);
+
+  delete freq->callback;
 }
 
 void close_async (uv_work_t *req);

@@ -123,7 +123,11 @@ function Speaker (opts) {
   // bind event listeners
   _this._format = this._format.bind(this);
 
-	_this.on('finish', _this.close);
+	_this.on('finish', function () {
+		debug('flush()');
+		_this.emit('flush');
+		_this.close(false);
+	});
 
   _this.on('pipe', function (source) {
     debug('pipe()');
@@ -328,19 +332,22 @@ Speaker.prototype.close = function (immediate, callback) {
 
   if (_this._closed) {
     debug('already closed...');
-    return callback();
+    return setImmediate(callback);
   }
 
   if (!_this.audio_handle) {
     debug('not invoking flush() or close() bindings since no `audio_handle`');
     _this._closed = true;
-    return callback();
+    return setImmediate(callback);
   }
 
   if (false !== immediate) {
     // TODO: async most likely…
     debug('invoking flush() native binding');
-    binding.flush(_this.audio_handle);
+
+    return binding.flush(_this.audio_handle, function () {
+			return _this.close(false, callback);
+		});
   }
 
   debug('invoking close() native binding');

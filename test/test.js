@@ -56,6 +56,17 @@ describe('Speaker', function () {
     s.write(Buffer(0));
   });
 
+  it('should emit a "flush" event after end()', function (done) {
+    var s = new Speaker();
+    var called = false;
+    s.on('flush', function () {
+      called = true;
+      done();
+    });
+    assert.equal(called, false);
+    s.end(Buffer(0));
+  });
+
   it('should emit a "close" event after end()', function (done) {
     this.slow(1000);
     var s = new Speaker();
