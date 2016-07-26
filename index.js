@@ -8,46 +8,106 @@ const
 
 	endianness = os.endianness(),
 
-	DEFAULT_SAMPLES_PER_FRAME = 1024;
+	DEFAULT_BIT_DEPTH_8 = 8,
+	DEFAULT_BIT_DEPTH_16 = 16,
+	DEFAULT_BIT_DEPTH_24 = 24,
+	DEFAULT_BIT_DEPTH_32 = 32,
+	DEFAULT_BIT_DEPTH_64 = 64,
+	DEFAULT_CHANNELS = 2,
+	DEFAULT_SAMPLE_RATE = 44100,
+	DEFAULT_SAMPLES_PER_FRAME = 1024,
+	DEFAULT_WATER_MARK = 0;
 
 
 module.exports = (function () {
 	'use strict';
 
 	function close (speaker, immediate, callback) {
+		if (typeof immediate === 'function') {
+			callback = immediate;
+			immediate = false;
+		}
 
+		callback = callback || function () {};
+		immediate = typeof immediate === 'undefined' ? false : immediate;
+
+		debug('close(%o, %o)', immediate, callback);
+
+		if (speaker._closed) {
+			debug('already closed...');
+			return setImmediate(callback);
+		}
+
+		if (!speaker._ao) {
+			debug('skipping flush() and close() bindings because there is no audio handle');
+			speaker._closed = true;
+			return setImmediate(callback);
+		}
+
+		if (immediate) {
+			debug('invoking flush() native binding');
+			return binding.flush(speaker._ao, () => speaker.close(false, callback));
+		}
+
+		debug('invoking close() native binding');
+		binding.close(speaker._ao, (result) => {
+			debug('close result(%o)', result);
+
+			/*eslint no-undefined:0*/
+			speaker._ao = undefined;
+			speaker._closed = true;
+			speaker.emit('close');
+
+			return callback();
+		});
+	}
+
+	function coalesce () {
+		let
+			args = Array.prototype.slice.call(arguments),
+			value;
+
+		args.some((item) => {
+			if (typeof item !== 'undefined' && item !== null) {
+				value = item;
+			}
+
+			return value;
+		});
+
+		return value;
 	}
 
 	function formatConstant (formatInfo) {
 		if (formatInfo.float) {
-			if (formatInfo.bitDepth === 32) {
+			if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_32) {
 				return binding.MPG123_ENC_FLOAT_32;
 			}
 
-			if (formatInfo.bitDepth === 64) {
+			if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_64) {
 				return binding.MPG123_ENC_FLOAT_64;
 			}
 		}
 
-		if (formatInfo.bitDepth === 8) {
+		if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_8) {
 			return formatInfo.signed ?
 				binding.MPG123_ENC_SIGNED_8 :
 				binding.MPG123_ENC_UNSIGNED_8;
 		}
 
-		if (formatInfo.bitDepth === 16) {
+		if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_16) {
 			return formatInfo.signed ?
 				binding.MPG123_ENC_SIGNED_16 :
 				binding.MPG123_ENC_UNSIGNED_16;
 		}
 
-		if (formatInfo.bitDepth === 24) {
+		if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_24) {
 			return formatInfo.signed ?
 				binding.MPG123_ENC_SIGNED_24 :
 				binding.MPG123_ENC_UNSIGNED_24;
 		}
 
-		if (formatInfo.bitDepth === 32) {
+		if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_32) {
 			return formatInfo.signed ?
 				binding.MPG123_ENC_SIGNED_32 :
 				binding.MPG123_ENC_UNSIGNED_32;
@@ -57,71 +117,113 @@ module.exports = (function () {
 	}
 
 	function open (speaker) {
+		debug('open()');
 
+		if (speaker._ao) {
+			return speaker.emit('error', new Error('open() called more than once!'));
+		}
+
+		let
+			format = formatConstant(speaker),
+			result;
+
+		if (!format) {
+			return speaker.emit('error', new Error('invalid PCM format specified'));
+		}
+
+		// initialize the audio handle
+		speaker._ao = new Buffer(binding.sizeof_audio_output_t);
+		result = binding.open(
+			speaker._ao,
+			speaker.channels,
+			speaker.sampleRate,
+			format);
+
+		if (result) {
+			return speaker.emit(
+				'error',
+				new Error(util.format('open() failed: %d', result)));
+		}
+
+		speaker.emit('open');
+
+		return speaker._ao;
 	}
 
 	function prepareOutput (speaker, options) {
 		// ensure options
 		options = options || {};
-		options.lowWaterMark = options.lowWaterMark || 0;
-		options.highWaterMark = options.highWaterMark || 0;
-
 		debug('initializeSpeaker(object keys = %o)', Object.keys(options));
 
-		// the `audio_output_t` struct pointer Buffer instance
 		speaker._ao = speaker._ao || null;
 
-		// flipped after close() is called, no write() calls allowed after
-		speaker._closed = typeof speaker._closed === 'undefined' ?
-			false :
-			speaker._closed;
+		speaker._closed = coalesce(speaker._closed, false);
 
-		if (options.bitDepth) {
-			debug('setting %o: %o', "bitDepth", options.bitDepth);
-			speaker.bitDepth = options.bitDepth;
-		}
+		speaker.bitDepth = coalesce(
+			options.bitDepth,
+			speaker.bitDepth,
+			(coalesce(options.float, speaker.float) ?
+				DEFAULT_BIT_DEPTH_32 :
+				DEFAULT_BIT_DEPTH_16));
+		debug('set bitDepth: %o', speaker.bitDepth);
 
-		if (options.channels) {
-			debug('setting %o: %o', 'channels', options.channels);
-			speaker.channels = options.channels;
-		}
+		speaker.channels = coalesce(
+			options.channels,
+			speaker.channels,
+			DEFAULT_CHANNELS);
+		debug('set channels: %o', speaker.channels);
+
+		// calculate the "block align"
+		speaker.blockAlign = (
+			speaker.bitDepth / DEFAULT_BIT_DEPTH_8 * speaker.channels);
 
 		if (!options.endianness || endianness === options.endianness) {
 			// no "endianness" specified or explicit native endianness
 			speaker.endianness = endianness;
 		} else {
-			throw new Error(
+			speaker.emit('error', new Error(
 				util.format(
 					'native endianness is %s, but %s was requested"',
 					endianness,
-					options.endianness));
+					options.endianness)));
 		}
 
-		if (typeof options.float !== 'undefined' && options.float !== null) {
-			debug('setting %o: %o', "float", options.float);
-			speaker.float = options.float;
-		}
+		speaker.float = coalesce(
+			options.float,
+			speaker.float);
+		debug('set float: %o', speaker.float);
+
+		speaker.highWaterMark = coalesce(
+			options.highWaterMark,
+			speaker.highWaterMark,
+			DEFAULT_WATER_MARK);
+
+		speaker.lowWaterMark = coalesce(
+			options.lowWaterMark,
+			speaker.lowWaterMark,
+			DEFAULT_WATER_MARK);
 
 		// Chunks are sent over to the backend in "samplesPerFrame * blockAlign"
 		// size. This is necessary because if we send too big of chunks at once,
 		// then there won't be any data ready when the audio callback comes
 		// (experienced with the CoreAudio backend).
-		if (options.samplesPerFrame) {
-			debug('setting %o: %o', "samplesPerFrame", options.samplesPerFrame);
-			speaker.samplesPerFrame = options.samplesPerFrame;
-		} else {
-			speaker.samplesPerFrame = DEFAULT_SAMPLES_PER_FRAME;
-		}
+		speaker.samplesPerFrame = coalesce(
+			options.samplesPerFrame,
+			speaker.samplesPerFrame,
+			DEFAULT_SAMPLES_PER_FRAME);
+		debug('set samplesPerFrame: %o', speaker.samplesPerFrame);
 
-		if (options.sampleRate) {
-			debug('setting %o: %o', "sampleRate", options.sampleRate);
-			speaker.sampleRate = options.sampleRate;
-		}
+		speaker.sampleRate = coalesce(
+			options.sampleRate,
+			speaker.sampleRate,
+			DEFAULT_SAMPLE_RATE);
+		debug('set sampleRate: %o', speaker.sampleRate);
 
-		if (typeof options.signed !== 'undefined' || options.signed !== null) {
-			debug('setting %o: %o', "signed", options.signed);
-			speaker.signed = options.signed;
-		}
+		speaker.signed = coalesce(
+			options.signed,
+			speaker.signed,
+			speaker.bitDepth !== DEFAULT_BIT_DEPTH_8);
+		debug('set signed: %o', options.signed);
 	}
 
 	function write (speaker, chunk, encoding, done) {
@@ -133,7 +235,7 @@ module.exports = (function () {
 		}
 
 		let
-			bytesRemaining,
+			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
 			handle = speaker._ao,
@@ -197,10 +299,12 @@ module.exports = (function () {
 		prepareOutput(_this, options);
 
 		// set instances methods
-		_this._write = write.bind(_this);
-		_this.close = close.bind(_this);
-		_this.format = prepareOutput.bind(_this);
-		_this.open = open.bind(_this);
+		_this._write = (chunk, encoding, done) => {
+			write(_this, chunk, encoding, done);
+		};
+		_this.close = (callback) => close(_this, callback);
+		_this.format = () => prepareOutput(_this);
+		_this.open = () => open(_this);
 
 		// handle key events
 		_this.on('finish', function () {
@@ -229,127 +333,10 @@ module.exports = (function () {
 		getFormat : formatConstant,
 		isSupported : (formatInfo) => {
 			return typeof formatInfo === 'number' ?
-				binding.formats & format === format :
+				binding.formats & format :
 				formatConstant(formatInfo) !== null;
 		},
 		Speaker : Speaker,
 		version : [binding.api_version, binding.revision].join('.')
 	};
 }());
-
-/**
- * Closes the audio backend. Normally this function will be called automatically
- * after the audio backend has finished playing the audio buffer through the
- * speakers.
- *
- * @param {Boolean} flush - if `false`, then don't call the `flush()` native binding call. Defaults to `true`.
- * @api public
- */
-
-Speaker.prototype.close = function (immediate, callback) {
-	var _this = this;
-
-	if (typeof immediate === 'function') {
-		callback = immediate;
-		immediate = false;
-	}
-
-	callback = callback || function () {};
-	immediate = typeof immediate === 'undefined' ? false : immediate;
-
-	debug('close(%o, %o)', immediate, callback);
-
-	if (_this._closed) {
-		debug('already closed...');
-		return setImmediate(callback);
-	}
-
-	if (!_this.audio_handle) {
-		debug('not invoking flush() or close() bindings since no `audio_handle`');
-		_this._closed = true;
-		return setImmediate(callback);
-	}
-
-	if (false !== immediate) {
-		// TODO: async most likely…
-		debug('invoking flush() native binding');
-
-		return binding.flush(_this.audio_handle, function () {
-			return _this.close(false, callback);
-		});
-	}
-
-	debug('invoking close() native binding');
-	binding.close(_this.audio_handle, function (r) {
-		debug('close result(%o)', r);
-
-		_this.audio_handle = null;
-		_this._closed = true;
-		_this.emit('close');
-
-		return callback();
-	});
-};
-
-/**
- * Calls the audio backend's `open()` function, and then emits an "open" event.
- *
- * @api private
- */
-
-Speaker.prototype.open = function () {
-	debug('open()');
-	if (this.audio_handle) {
-		this.emit('error', new Error('open() called more than once!'));
-		return;
-	}
-
-	// set default options, if not set
-	if (null == this.channels) {
-		debug('setting default %o: %o', 'channels', 2);
-		this.channels = 2;
-	}
-
-	if (null == this.bitDepth) {
-		var depth = this.float ? 32 : 16;
-		debug('setting default %o: %o', 'bitDepth', depth);
-		this.bitDepth = depth;
-	}
-
-	if (null == this.sampleRate) {
-		debug('setting default %o: %o', 'sampleRate', 44100);
-		this.sampleRate = 44100;
-	}
-
-	if (null == this.signed) {
-		debug('setting default %o: %o', 'signed', this.bitDepth != 8);
-		this.signed = this.bitDepth != 8;
-	}
-
-	var format = exports.getFormat(this);
-	if (null == format) {
-		this.emit('error', new Error('invalid PCM format specified'));
-		return;
-	}
-
-	if (!exports.isSupported(format)) {
-		this.emit(
-			'error',
-			new Error('specified PCM format is not supported by "' + binding.name + '" backend'));
-		return;
-	}
-
-	// calculate the "block align"
-	this.blockAlign = this.bitDepth / 8 * this.channels;
-
-	// initialize the audio handle
-	// TODO: open async?
-	this.audio_handle = new Buffer(binding.sizeof_audio_output_t);
-	var r = binding.open(this.audio_handle, this.channels, this.sampleRate, format);
-	if (0 !== r) {
-		this.emit('error', new Error('open() failed: ' + r));
-	}
-
-	this.emit('open');
-	return this.audio_handle;
-};
