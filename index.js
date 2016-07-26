@@ -176,6 +176,7 @@ module.exports = (function () {
 		// calculate the "block align"
 		speaker.blockAlign = (
 			speaker.bitDepth / DEFAULT_BIT_DEPTH_8 * speaker.channels);
+		debug('set blockAlign: %o', speaker.blockAlign);
 
 		if (!options.endianness || endianness === options.endianness) {
 			// no "endianness" specified or explicit native endianness
@@ -303,7 +304,7 @@ module.exports = (function () {
 			write(_this, chunk, encoding, done);
 		};
 		_this.close = (callback) => close(_this, callback);
-		_this.format = () => prepareOutput(_this);
+		_this.format = (options) => prepareOutput(_this, options);
 		_this.open = () => open(_this);
 
 		// handle key events
