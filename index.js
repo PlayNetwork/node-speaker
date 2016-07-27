@@ -232,7 +232,10 @@ module.exports = (function () {
 
 		if (speaker._closed) {
 			// close() has already been called. this should not be called
-			return done(new Error('write() call after close() call'));
+			debug(
+				'aborting write() call (%o bytes) - speaker is `_closed`',
+				chunk.length);
+			return done();
 		}
 
 		let
@@ -242,7 +245,9 @@ module.exports = (function () {
 			handle = speaker._ao,
 			writeToHandle = () => {
 				if (speaker._closed) {
-					debug('aborting remainder of write() call (%o bytes), since speaker is `_closed`', left.length);
+					debug(
+						'aborting write() call (%o bytes) - speaker is `_closed`',
+						chunk.length);
 					return done();
 				}
 
@@ -255,20 +260,20 @@ module.exports = (function () {
 					bytesRemaining = null;
 				}
 
-				debug('writing %o bytes', bytesToWrite.length);
+				//debug('writing %o bytes', bytesToWrite.length);
 				binding.write(handle, bytesToWrite, bytesToWrite.length, (bytesWritten) => {
-					debug('wrote %o bytes', bytesWritten);
+					//debug('wrote %o bytes', bytesWritten);
 
 					if (bytesWritten !== bytesToWrite.length) {
 						return done(new Error('write() failed: ' + bytesWritten));
 					}
 
 					if (bytesRemaining) {
-						debug('%o bytes remaining in this chunk', bytesRemaining.length);
+						//debug('%o bytes remaining in this chunk', bytesRemaining.length);
 						return writeToHandle();
 					}
 
-					debug('done with this chunk');
+					debug('completed chunk with %o bytes', chunk.length);
 					return done();
 				});
 			};
