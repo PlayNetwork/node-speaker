@@ -1,4 +1,5 @@
-0.3.2 / 2016-07-25
+0.4.1 / 2016-07-25
+==================
 
   * made `close` non-blocking (i.e. asynchronous)
   * removed the `_flush` method
