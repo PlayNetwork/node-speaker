@@ -3,6 +3,7 @@
 
   * made `close` non-blocking (i.e. asynchronous)
   * removed the `_flush` method
+  * switched default build target to "Release"
 
 0.3.1 / 2016-05-30
 ==================

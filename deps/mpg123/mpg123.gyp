@@ -11,7 +11,7 @@
     'target_arch%': 'ia32',
   },
   'target_defaults': {
-    'default_configuration': 'Debug',
+    'default_configuration': 'Release',
     'configurations': {
       'Debug': {
         'defines': [ 'DEBUG', '_DEBUG' ],
@@ -22,7 +22,7 @@
         },
       },
       'Release': {
-        'defines': [ 'NDEBUG' ],
+        'defines': [ 'NDEBUG', 'NO_WARNING' ],
         'msvs_settings': {
           'VCCLCompilerTool': {
             'RuntimeLibrary': 0, # static release

@@ -72,7 +72,7 @@ module.exports = (function () {
 				value = item;
 			}
 
-			return value;
+			return typeof value === 'boolean' || value;
 		});
 
 		return value;
@@ -153,7 +153,7 @@ module.exports = (function () {
 	function prepareOutput (speaker, options) {
 		// ensure options
 		options = options || {};
-		debug('initializeSpeaker(object keys = %o)', Object.keys(options));
+		debug('prepareOuput (object keys = %o)', Object.keys(options));
 
 		speaker._ao = speaker._ao || null;
 
@@ -260,16 +260,16 @@ module.exports = (function () {
 					bytesRemaining = null;
 				}
 
-				//debug('writing %o bytes', bytesToWrite.length);
+				debug('writing %o bytes', bytesToWrite.length);
 				binding.write(handle, bytesToWrite, bytesToWrite.length, (bytesWritten) => {
-					//debug('wrote %o bytes', bytesWritten);
+					debug('wrote %o bytes', bytesWritten);
 
 					if (bytesWritten !== bytesToWrite.length) {
 						return done(new Error('write() failed: ' + bytesWritten));
 					}
 
 					if (bytesRemaining) {
-						//debug('%o bytes remaining in this chunk', bytesRemaining.length);
+						debug('%o bytes remaining in this chunk', bytesRemaining.length);
 						return writeToHandle();
 					}
 
@@ -281,6 +281,7 @@ module.exports = (function () {
 		// ensure we have an audio handle to write to
 		if (!handle) {
 			try {
+				debug('creating _ao because one does not exist');
 				handle = speaker.open();
 			} catch (ex) {
 				return done(ex);
@@ -320,7 +321,6 @@ module.exports = (function () {
 
 		_this.on('pipe', function (source) {
 			debug('pipe()');
-			prepareOutput(_this, source);
 			source.once('format', _this.format);
 		});
 
