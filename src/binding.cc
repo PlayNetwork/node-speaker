@@ -115,7 +115,10 @@ NAN_METHOD(Flush) {
 
 void flush_async (uv_work_t *req) {
   flush_req *freq = reinterpret_cast<flush_req *>(req->data);
-  freq->ao->flush(freq->ao);
+
+	if (freq->ao->flush) {
+  	freq->ao->flush(freq->ao);
+	}
 }
 
 void flush_after (uv_work_t *req) {

@@ -78,6 +78,12 @@ module.exports = (function () {
 		return value;
 	}
 
+	function flush (speaker) {
+		debug('flush(%o)');
+		speaker._writeState = null;
+		speaker.emit('flush');
+	}
+
 	function formatConstant (formatInfo) {
 		if (formatInfo.float) {
 			if (formatInfo.bitDepth === DEFAULT_BIT_DEPTH_32) {
@@ -231,50 +237,64 @@ module.exports = (function () {
 		debug('write() (%o bytes, %o encoding)', chunk.length, encoding);
 
 		if (speaker._closed) {
-			// close() has already been called. this should not be called
+			// close() has already been called
 			debug(
 				'aborting write() call (%o bytes) - speaker is `_closed`',
 				chunk.length);
 			return done();
 		}
 
+		// track what is being written
+		speaker._writeState = new Buffer(chunk);
+
 		let
-			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
+			drain = () => {
+				if (speaker._writeState && speaker._writeState.length) {
+					debug('%o bytes remaining in this chunk', speaker._writeState.length);
+					return writeToHandle();
+				}
+
+				// cleanup the event listener
+				speaker.removeListener('drain', drain);
+
+				debug('completed chunk with %o bytes', chunk.length);
+				return done();
+			},
 			handle = speaker._ao,
 			writeToHandle = () => {
 				if (speaker._closed) {
 					debug(
 						'aborting write() call (%o bytes) - speaker is `_closed`',
-						chunk.length);
+						speaker._writeState.length);
+
 					return done();
 				}
 
-				bytesToWrite = bytesRemaining;
+				bytesToWrite = speaker._writeState;
 				if (bytesToWrite.length > chunkSize) {
 					let temp = bytesToWrite;
 					bytesToWrite = temp.slice(0, chunkSize);
-					bytesRemaining = temp.slice(chunkSize);
+					speaker._writeState = temp.slice(chunkSize);
 				} else {
-					bytesRemaining = null;
+					speaker._writeState = null;
 				}
 
 				debug('writing %o bytes', bytesToWrite.length);
 				binding.write(handle, bytesToWrite, bytesToWrite.length, (bytesWritten) => {
 					debug('wrote %o bytes', bytesWritten);
 
+					// handle when not all bytes are written...
 					if (bytesWritten !== bytesToWrite.length) {
-						return done(new Error('write() failed: ' + bytesWritten));
+						speaker.emit(
+							'error',
+							new Error('write() failed: ' + bytesWritten));
+
+						return done();
 					}
 
-					if (bytesRemaining) {
-						debug('%o bytes remaining in this chunk', bytesRemaining.length);
-						return writeToHandle();
-					}
-
-					debug('completed chunk with %o bytes', chunk.length);
-					return done();
+					speaker.emit('drain');
 				});
 			};
 
@@ -287,6 +307,9 @@ module.exports = (function () {
 				return done(ex);
 			}
 		}
+
+		// setup handling of the drain
+		speaker.on('drain', drain);
 
 		// write to the audio handle
 		writeToHandle();
@@ -309,7 +332,9 @@ module.exports = (function () {
 		_this._write = (chunk, encoding, done) => {
 			write(_this, chunk, encoding, done);
 		};
+		_this._writeState = null;
 		_this.close = (callback) => close(_this, callback);
+		_this.flush = (callback) => flush(_this, callback);
 		_this.format = (options) => prepareOutput(_this, options);
 		_this.open = () => open(_this);
 
