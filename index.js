@@ -78,9 +78,9 @@ module.exports = (function () {
 		return value;
 	}
 
-	function flush (speaker) {
+	function flush (speaker, callback) {
 		debug('flush(%o)');
-		speaker._writeState = null;
+		speaker._flushed = true;
 		speaker.emit('flush');
 	}
 
@@ -164,6 +164,7 @@ module.exports = (function () {
 		speaker._ao = speaker._ao || null;
 
 		speaker._closed = coalesce(speaker._closed, false);
+		speaker._flushed = false;
 
 		speaker.bitDepth = coalesce(
 			options.bitDepth,
@@ -244,15 +245,21 @@ module.exports = (function () {
 			return done();
 		}
 
-		// track what is being written
-		speaker._writeState = new Buffer(chunk);
+		if (speaker._flushed) {
+			// speaker state is flushed
+			debug(
+				'aborting write() call (%o bytes) - speaker is `_flushed`',
+				chunk.length);
+			return done();
+		}
 
 		let
+			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
 			drain = () => {
-				if (speaker._writeState && speaker._writeState.length) {
-					debug('%o bytes remaining in this chunk', speaker._writeState.length);
+				if (bytesRemaining && bytesRemaining.length) {
+					debug('%o bytes remaining in this chunk', bytesRemaining.length);
 					return writeToHandle();
 				}
 
@@ -267,18 +274,18 @@ module.exports = (function () {
 				if (speaker._closed) {
 					debug(
 						'aborting write() call (%o bytes) - speaker is `_closed`',
-						speaker._writeState.length);
+						bytesRemaining.length);
 
 					return done();
 				}
 
-				bytesToWrite = speaker._writeState;
+				bytesToWrite = bytesRemaining;
 				if (bytesToWrite.length > chunkSize) {
 					let temp = bytesToWrite;
 					bytesToWrite = temp.slice(0, chunkSize);
-					speaker._writeState = temp.slice(chunkSize);
+					bytesRemaining = temp.slice(chunkSize);
 				} else {
-					speaker._writeState = null;
+					bytesRemaining = null;
 				}
 
 				debug('writing %o bytes', bytesToWrite.length);
@@ -328,11 +335,13 @@ module.exports = (function () {
 		// initialize properties
 		prepareOutput(_this, options);
 
+		// set instance properties
+		_this._flushed = false;
+
 		// set instances methods
 		_this._write = (chunk, encoding, done) => {
 			write(_this, chunk, encoding, done);
 		};
-		_this._writeState = null;
 		_this.close = (callback) => close(_this, callback);
 		_this.flush = (callback) => flush(_this, callback);
 		_this.format = (options) => prepareOutput(_this, options);
