@@ -22,16 +22,10 @@ const
 module.exports = (function () {
 	'use strict';
 
-	function close (speaker, immediate, callback) {
-		if (typeof immediate === 'function') {
-			callback = immediate;
-			immediate = false;
-		}
-
+	function close (speaker, callback) {
 		callback = callback || function () {};
-		immediate = typeof immediate === 'undefined' ? false : immediate;
 
-		debug('close(%o, %o)', immediate, callback);
+		debug('close(%o)', callback);
 
 		if (speaker._closed) {
 			debug('already closed...');
@@ -39,14 +33,9 @@ module.exports = (function () {
 		}
 
 		if (!speaker._ao) {
-			debug('skipping flush() and close() bindings because there is no audio handle');
+			debug('skipping close() bindings because there is no audio handle');
 			speaker._closed = true;
 			return setImmediate(callback);
-		}
-
-		if (immediate) {
-			debug('invoking flush() native binding');
-			return binding.flush(speaker._ao, () => speaker.close(false, callback));
 		}
 
 		debug('invoking close() native binding');
@@ -79,9 +68,20 @@ module.exports = (function () {
 	}
 
 	function flush (speaker, callback) {
-		debug('flush(%o)');
-		speaker._flushed = true;
-		speaker.emit('flush');
+		callback = callback || function () {};
+
+		if (!speaker._ao) {
+			debug('skipping close() bindings because there is no audio handle');
+			return setImmediate(callback);
+		}
+
+		debug('invoking flush() native binding');
+		binding.flush(speaker._ao, function (result) {
+			debug('flush result (%o)', result);
+
+			speaker.emit('flush');
+			return close(speaker, callback);
+		});
 	}
 
 	function formatConstant (formatInfo) {
@@ -162,9 +162,7 @@ module.exports = (function () {
 		debug('prepareOuput (object keys = %o)', Object.keys(options));
 
 		speaker._ao = speaker._ao || null;
-
 		speaker._closed = coalesce(speaker._closed, false);
-		speaker._flushed = false;
 
 		speaker.bitDepth = coalesce(
 			options.bitDepth,
@@ -245,21 +243,13 @@ module.exports = (function () {
 			return done();
 		}
 
-		if (speaker._flushed) {
-			// speaker state is flushed
-			debug(
-				'aborting write() call (%o bytes) - speaker is `_flushed`',
-				chunk.length);
-			return done();
-		}
-
 		let
 			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
 			drain = () => {
 				if (bytesRemaining && bytesRemaining.length) {
-					debug('%o bytes remaining in this chunk', bytesRemaining.length);
+					//debug('%o bytes remaining in this chunk', bytesRemaining.length);
 					return writeToHandle();
 				}
 
@@ -288,9 +278,9 @@ module.exports = (function () {
 					bytesRemaining = null;
 				}
 
-				debug('writing %o bytes', bytesToWrite.length);
+				//debug('writing %o bytes', bytesToWrite.length);
 				binding.write(handle, bytesToWrite, bytesToWrite.length, (bytesWritten) => {
-					debug('wrote %o bytes', bytesWritten);
+					//debug('wrote %o bytes', bytesWritten);
 
 					// handle when not all bytes are written...
 					if (bytesWritten !== bytesToWrite.length) {
@@ -334,9 +324,6 @@ module.exports = (function () {
 
 		// initialize properties
 		prepareOutput(_this, options);
-
-		// set instance properties
-		_this._flushed = false;
 
 		// set instances methods
 		_this._write = (chunk, encoding, done) => {

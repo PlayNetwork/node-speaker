@@ -22,6 +22,7 @@ struct close_req {
 struct flush_req {
   uv_work_t req;
   audio_output_t *ao;
+	int r;
   Nan::Callback *callback;
 };
 
@@ -104,7 +105,8 @@ NAN_METHOD(Flush) {
 
   flush_req *req = new flush_req;
   req->ao = ao;
-  req->callback = new Nan::Callback(info[0].As<Function>());
+	req->r = 0;
+  req->callback = new Nan::Callback(info[1].As<Function>());
 
   req->req.data = req;
 
@@ -118,7 +120,10 @@ void flush_async (uv_work_t *req) {
 
 	if (freq->ao->flush) {
   	freq->ao->flush(freq->ao);
+		freq->r = 0;
 	}
+
+	freq->r = 1;
 }
 
 void flush_after (uv_work_t *req) {
@@ -126,7 +131,7 @@ void flush_after (uv_work_t *req) {
   flush_req *freq = reinterpret_cast<flush_req *>(req->data);
 
   Local<Value> argv[] = {
-    Nan::Undefined()
+    Nan::New(freq->r)
   };
 
   freq->callback->Call(1, argv);
