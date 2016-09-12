@@ -4,6 +4,7 @@
   * made `close` non-blocking (i.e. asynchronous)
   * renamed the `_flush` method to `flush`
   * switched default build target to "Release"
+  * fixed bug where crash would occur if end was called without a callback
 
 0.3.1 / 2016-05-30
 ==================

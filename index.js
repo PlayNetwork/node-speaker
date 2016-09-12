@@ -246,6 +246,11 @@ module.exports = (function () {
 		let
 			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
+			complete = () => {
+				if (done) {
+					return done();
+				}
+			},
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
 			drain = () => {
 				if (bytesRemaining && bytesRemaining.length) {
@@ -257,7 +262,7 @@ module.exports = (function () {
 				speaker.removeListener('drain', drain);
 
 				debug('completed chunk with %o bytes', chunk.length);
-				return done();
+				return complete();
 			},
 			handle = speaker._ao,
 			writeToHandle = () => {
@@ -265,8 +270,7 @@ module.exports = (function () {
 					debug(
 						'aborting write() call (%o bytes) - speaker is `_closed`',
 						bytesRemaining.length);
-
-					return done();
+					return complete();
 				}
 
 				bytesToWrite = bytesRemaining;
@@ -287,8 +291,7 @@ module.exports = (function () {
 						speaker.emit(
 							'error',
 							new Error('write() failed: ' + bytesWritten));
-
-						return done();
+						return complete();
 					}
 
 					speaker.emit('drain');
