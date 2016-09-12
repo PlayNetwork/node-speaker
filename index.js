@@ -247,7 +247,7 @@ module.exports = (function () {
 			bytesRemaining = new Buffer(chunk),
 			bytesToWrite,
 			complete = () => {
-				if (done) {
+				if (done && !speaker._closed) {
 					return done();
 				}
 			},
