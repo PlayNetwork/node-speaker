@@ -252,29 +252,33 @@ module.exports = (function () {
 				}
 			},
 			chunkSize = speaker.blockAlign * speaker.samplesPerFrame,
-			drain = () => {
+			handle = speaker._ao,
+			outputRemainingBytes = () => {
 				if (bytesRemaining && bytesRemaining.length) {
-					//debug('%o bytes remaining in this chunk', bytesRemaining.length);
+					// debug('%o bytes remaining in this chunk', bytesRemaining.length);
 					return writeToHandle();
 				}
 
-				// cleanup the event listener
-				speaker.removeListener('drain', drain);
-
 				debug('completed chunk with %o bytes', chunk.length);
+
+				// emit the drain event to let consumers know writing can resume...
+				speaker.emit('drain');
+
+				// return the callback
 				return complete();
 			},
-			handle = speaker._ao,
 			writeToHandle = () => {
+				// don't write when closed...
 				if (speaker._closed) {
 					debug(
 						'aborting write() call (%o bytes) - speaker is `_closed`',
 						bytesRemaining.length);
-					return complete();
+
+					return setImmediate(complete);
 				}
 
 				bytesToWrite = bytesRemaining;
-				if (bytesToWrite.length > chunkSize) {
+				if (bytesToWrite && bytesToWrite.length > chunkSize) {
 					let temp = bytesToWrite;
 					bytesToWrite = temp.slice(0, chunkSize);
 					bytesRemaining = temp.slice(chunkSize);
@@ -294,7 +298,8 @@ module.exports = (function () {
 						return complete();
 					}
 
-					speaker.emit('drain');
+					// continue writing as applicable...
+					outputRemainingBytes();
 				});
 			};
 
@@ -307,9 +312,6 @@ module.exports = (function () {
 				return done(ex);
 			}
 		}
-
-		// setup handling of the drain
-		speaker.on('drain', drain);
 
 		// write to the audio handle
 		writeToHandle();
@@ -330,7 +332,7 @@ module.exports = (function () {
 
 		// set instances methods
 		_this._write = (chunk, encoding, done) => {
-			write(_this, chunk, encoding, done);
+			return write(_this, chunk, encoding, done);
 		};
 		_this.close = (callback) => close(_this, callback);
 		_this.flush = (callback) => flush(_this, callback);

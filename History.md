@@ -1,3 +1,8 @@
+0.5.0 / 2016-11-08
+==================
+
+  * modified behavior of `drain` to output after the chunk has been buffered
+
 0.4.1 / 2016-07-25
 ==================
 
