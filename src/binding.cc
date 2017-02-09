@@ -16,14 +16,14 @@ struct close_req {
   uv_work_t req;
   audio_output_t *ao;
   int r;
-  Nan::Persistent<v8::Function> callback;
+  Nan::Callback *callback;
 };
 
 struct flush_req {
   uv_work_t req;
   audio_output_t *ao;
 	int r;
-  Nan::Persistent<v8::Function> callback;
+  Nan::Callback *callback;
 };
 
 struct write_req {
@@ -32,7 +32,7 @@ struct write_req {
   unsigned char *buffer;
   int len;
   int written;
-  Nan::Persistent<v8::Function> callback;
+  Nan::Callback *callback;
 };
 
 NAN_METHOD(Open) {
@@ -69,7 +69,7 @@ NAN_METHOD(Write) {
   req->buffer = buffer;
   req->len = len;
   req->written = 0;
-  req->callback.Reset(info[3].As<Function>());
+  req->callback = new Nan::Callback(info[3].As<Function>());
 
   req->req.data = req;
 
@@ -87,20 +87,14 @@ void write_after (uv_work_t *req) {
   Nan::HandleScope scope;
   write_req *wreq = reinterpret_cast<write_req *>(req->data);
 
-  Handle<Value> argv[1];
-  argv[0] = Nan::New<Integer>(wreq->written);
+  Local<Value> argv[] = {
+    Nan::New(wreq->written)
+  };
 
-  Nan::TryCatch try_catch;
+  wreq->callback->Call(1, argv);
 
-  Nan::New(wreq->callback)->Call(Nan::GetCurrentContext()->Global(), 1, argv);
-
-  // cleanup
-  wreq->callback.Reset();
+  delete wreq->callback;
   delete wreq;
-
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
-  }
 }
 
 void flush_async (uv_work_t *);
@@ -113,7 +107,7 @@ NAN_METHOD(Flush) {
   flush_req *req = new flush_req;
   req->ao = ao;
 	req->r = 0;
-  req->callback.Reset(info[1].As<Function>());
+  req->callback = new Nan::Callback(info[1].As<Function>());
 
   req->req.data = req;
 
@@ -137,20 +131,14 @@ void flush_after (uv_work_t *req) {
   Nan::HandleScope scope;
   flush_req *freq = reinterpret_cast<flush_req *>(req->data);
 
-  Handle<Value> argv[1];
-  argv[0] = Nan::New<Integer>(freq->r);
+  Local<Value> argv[] = {
+    Nan::New(freq->r)
+  };
 
-  Nan::TryCatch try_catch;
+  freq->callback->Call(1, argv);
 
-  Nan::New(freq->callback)->Call(Nan::GetCurrentContext()->Global(), 1, argv);
-
-  // cleanup
-  freq->callback.Reset();
+  delete freq->callback;
   delete freq;
-
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
-  }
 }
 
 void close_async (uv_work_t *req);
@@ -163,7 +151,7 @@ NAN_METHOD(Close) {
   close_req *req = new close_req;
   req->ao = ao;
   req->r = 0;
-  req->callback.Reset(info[1].As<Function>());
+  req->callback = new Nan::Callback(info[1].As<Function>());
 
   req->req.data = req;
 
@@ -184,20 +172,14 @@ void close_after (uv_work_t *req) {
   Nan::HandleScope scope;
   close_req *creq = reinterpret_cast<close_req *>(req->data);
 
-  Handle<Value> argv[1];
-  argv[0] = Nan::New<Integer>(creq->r);
+  Local<Value> argv[] = {
+    Nan::New(creq->r)
+  };
 
-  Nan::TryCatch try_catch;
+  creq->callback->Call(1, argv);
 
-  Nan::New(creq->callback)->Call(Nan::GetCurrentContext()->Global(), 1, argv);
-
-  // cleanup
-  creq->callback.Reset();
+  delete creq->callback;
   delete creq;
-
-  if (try_catch.HasCaught()) {
-    FatalException(try_catch);
-  }
 }
 
 void Initialize(Handle<Object> target) {
