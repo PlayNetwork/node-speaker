@@ -1,3 +1,8 @@
+0.5.1 / 2017-02-09
+==================
+
+  * modified struct cleanup flow on asynchronous calls
+
 0.5.0 / 2016-11-08
 ==================
 
