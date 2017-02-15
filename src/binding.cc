@@ -94,6 +94,7 @@ void write_after (uv_work_t *req) {
   wreq->callback->Call(1, argv);
 
   delete wreq->callback;
+  wreq->buffer = NULL;
   delete wreq;
 }
 
