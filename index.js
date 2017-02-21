@@ -240,6 +240,7 @@ module.exports = (function () {
 			debug(
 				'aborting write() call (%o bytes) - speaker is `_closed`',
 				chunk.length);
+
 			return done();
 		}
 
@@ -315,6 +316,9 @@ module.exports = (function () {
 
 		// write to the audio handle
 		writeToHandle();
+
+		// false when the length of input PCM data is below the high water mark
+		return bytesRemaining <= chunkSize;
 	}
 
 	function Speaker (options) {

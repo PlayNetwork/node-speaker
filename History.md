@@ -1,3 +1,8 @@
+0.5.2 / 2017-02-21
+==================
+
+  * modified return value of `write` to properly indicate high water mark status
+
 0.5.1 / 2017-02-09
 ==================
 
